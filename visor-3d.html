@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Visor 3D Equipamiento</title>
+    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: Arial, sans-serif;
+            background: #f0f0f0;
+        }
+        
+        .container {
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .controls {
+            padding: 10px;
+            background: white;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        
+        .scenario-selector {
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background: white;
+        }
+        
+        .viewer-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        model-viewer {
+            width: 100%;
+            height: 100%;
+            background-color: transparent;
+        }
+        
+        .loading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        /* Estilos para diferentes escenarios */
+        .scenario-office {
+            --model-viewer-environment-image: url('https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/aircraft_workshop_01_1k.hdr');
+        }
+        
+        .scenario-home {
+            --model-viewer-environment-image: url('https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/neutral_lighting_1k.hdr');
+        }
+        
+        .scenario-outdoor {
+            --model-viewer-environment-image: url('https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/spruit_sunrise_1k.hdr');
+        }
+        
+        .ar-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-weight: bold;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        
+        .ar-button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="controls">
+            <label for="scenario-select">Escenario:</label>
+            <select id="scenario-select" class="scenario-selector">
+                <option value="office">Oficina Moderna</option>
+                <option value="home">Hogar Confortable</option>
+                <option value="outdoor">Espacio Exterior</option>
+            </select>
+            <div id="product-count">0 productos</div>
+        </div>
+        
+        <div class="viewer-container">
+            <model-viewer 
+                id="viewer"
+                class="scenario-office"
+                camera-controls 
+                auto-rotate 
+                loading="lazy"
+                ar
+                ar-modes="webxr scene-viewer quick-look"
+                poster="https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/models/shishkebab.glb"
+                shadow-intensity="1"
+                environment-image="https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/aircraft_workshop_01_1k.hdr">
+                
+                <div class="loading-indicator" slot="poster">
+                    <div>Cargando configuración 3D...</div>
+                    <div id="loading-progress">0%</div>
+                </div>
+                
+                <button slot="ar-button" class="ar-button">
+                    📱 Ver en tu espacio
+                </button>
+            </model-viewer>
+        </div>
+    </div>
+
+    <script>
+        const modelViewer = document.querySelector('#viewer');
+        const scenarioSelect = document.getElementById('scenario-select');
+        const productCount = document.getElementById('product-count');
+        const loadingIndicator = document.querySelector('.loading-indicator');
+        
+        let currentItems = [];
+        let currentScenario = 'office';
+        
+        // Escuchar cambios de escenario
+        scenarioSelect.addEventListener('change', function() {
+            currentScenario = this.value;
+            updateScenarioEnvironment();
+        });
+        
+        // Función para actualizar el entorno del escenario
+        function updateScenarioEnvironment() {
+            modelViewer.className = `scenario-${currentScenario}`;
+            
+            // Configurar entorno según escenario
+            const environments = {
+                office: 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/aircraft_workshop_01_1k.hdr',
+                home: 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/neutral_lighting_1k.hdr',
+                outdoor: 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/environments/spruit_sunrise_1k.hdr'
+            };
+            
+            modelViewer.environmentImage = environments[currentScenario];
+        }
+        
+        // Escuchar mensajes del parent (Wix)
+        window.addEventListener('message', function(event) {
+            if (event.data && event.data.action) {
+                switch(event.data.action) {
+                    case 'updateScene':
+                        updateScene(event.data.items, event.data.scenario);
+                        break;
+                    case 'changeScenario':
+                        currentScenario = event.data.scenario;
+                        scenarioSelect.value = currentScenario;
+                        updateScenarioEnvironment();
+                        break;
+                }
+            }
+        });
+        
+        // Función para actualizar la escena con productos del carrito
+        function updateScene(items, scenario) {
+            currentItems = items || [];
+            
+            // Actualizar contador
+            productCount.textContent = `${currentItems.length} producto${currentItems.length !== 1 ? 's' : ''}`;
+            
+            // Cambiar escenario si se especifica
+            if (scenario && scenario !== currentScenario) {
+                currentScenario = scenario;
+                scenarioSelect.value = currentScenario;
+                updateScenarioEnvironment();
+            }
+            
+            // Cargar modelo compuesto
+            loadCompositeScene(currentItems);
+        }
+        
+        // Función para cargar escena con productos
+        function loadCompositeScene(items) {
+            showLoading(true);
+            
+            try {
+                if (items.length === 0) {
+                    // Escena vacía
+                    modelViewer.src = 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/models/shishkebab.glb';
+                    modelViewer.setAttribute('alt', 'Carrito vacío');
+                } else {
+                    // Por simplicidad, mostrar el primer producto
+                    // En producción: combinar modelos o usar compositor de escenas
+                    const firstItem = items[0];
+                    const modelPath = getModelPath(firstItem.productId);
+                    
+                    if (modelPath) {
+                        modelViewer.src = modelPath;
+                        modelViewer.setAttribute('alt', `Configuración con ${items.length} producto(s)`);
+                    } else {
+                        // Modelo por defecto si no se encuentra
+                        modelViewer.src = 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/models/shishkebab.glb';
+                        modelViewer.setAttribute('alt', 'Modelo no encontrado');
+                    }
+                }
+                
+                console.log('Escena actualizada con', items.length, 'productos');
+                
+            } catch (error) {
+                console.error('Error cargando escena:', error);
+                modelViewer.src = 'https://cdn.jsdelivr.net/gh/google/model-viewer/shared-assets/models/shishkebab.glb';
+                modelViewer.setAttribute('alt', 'Error al cargar modelo');
+            }
+        }
+        
+        // Función para obtener la ruta del modelo según ID del producto
+        function getModelPath(productId) {
+            // Mapear IDs de productos a rutas de modelos
+            const modelPaths = {
+                'producto-1': 'https://tu-hosting.com/models/producto-1.glb',
+                'producto-2': 'https://tu-hosting.com/models/producto-2.glb',
+                'producto-3': 'https://tu-hosting.com/models/producto-3.glb'
+                // Añadir más productos según sea necesario
+            };
+            
+            return modelPaths[productId] || null;
+        }
+        
+        // Función para mostrar/ocultar indicador de carga
+        function showLoading(show) {
+            if (show) {
+                loadingIndicator.style.display = 'block';
+            } else {
+                loadingIndicator.style.display = 'none';
+            }
+        }
+        
+        // Eventos del modelo
+        modelViewer.addEventListener('load', () => {
+            showLoading(false);
+            console.log('Modelo cargado exitosamente');
+        });
+        
+        modelViewer.addEventListener('error', (event) => {
+            showLoading(false);
+            console.error('Error cargando modelo:', event.detail);
+        });
+        
+        modelViewer.addEventListener('progress', (event) => {
+            const progress = Math.round(event.detail.totalProgress * 100);
+            document.getElementById('loading-progress').textContent = `${progress}%`;
+        });
+        
+        // Inicializar con escena vacía
+        updateScene([], 'office');
+    </script>
+</body>
+</html>
